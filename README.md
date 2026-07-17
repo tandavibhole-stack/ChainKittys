@@ -241,8 +241,8 @@ The form should contain the following fields:
 10. **What improvements would you like to see?** (Paragraph)
 
 ### Google Form & Export Link
-- **Google Form Link:** [Feedback Form](https://forms.gle/ChainKittyFeedbackForm)
-- **Excel/Spreadsheet Export Link:** [Exported Spreadsheet](https://docs.google.com/spreadsheets/d/1ChainKittyFeedbackData/edit?usp=sharing)
+- **Google Form Link:** [Feedback Form](https://docs.google.com/forms/d/1xu-i8Ej4fymC7TjEFGWF5Sraoh8ej5L9grXFmkvvHtI/viewform)
+- **Excel/Spreadsheet Export Link:** [Exported Spreadsheet](https://docs.google.com/spreadsheets/d/1G1L7zKSaAVzH2CRHYRfX6k32elsR4gxUh4iSVhCBKk4/edit?usp=sharing)
 
 ---
 

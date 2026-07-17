@@ -281,9 +281,18 @@ The form should contain the following fields:
 
 The repository must include screenshots corresponding to the following categories:
 
-1. **Product UI Screenshot:** Desktop view of the interactive digital chit fund dashboard showing active cycle state.
-2. **Mobile Responsive Screenshot:** 375px view of the dashboard, showing forms stacked and tables wrapping elegantly.
-3. **Monitoring Setup Screenshot:** PostHog / Sentry dashboard showing active tracking and error catching.
-4. **Cargo Test Screenshot:** Terminal output showing `cargo test -j 1` passing all 6 contract test cases.
+1. **Product UI Screenshot:**
+![alt text](./image.png)
+
+2. **Mobile Responsive Screenshot:**
+![alt text](./image-1.png)
+
+3. **Monitoring Setup Screenshot:**
+![alt text](./image-2.png)
+
+4. **Cargo Test Screenshot:**
+![alt text](./image-3.png)
+
 5. **CI/CD Screenshot:** GitHub Actions dashboard with a green run indicating contract tests and Vite production build passed.
+
 6. **Demo Video Link:** `<ADD_YOUR_DEMO_VIDEO_LINK>`

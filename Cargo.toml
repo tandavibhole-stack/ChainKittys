@@ -14,3 +14,7 @@ lto = true
 panic = "abort"
 incremental = false
 codegen-units = 1
+
+[patch.crates-io]
+ethnum = { path = "contracts/ethnum-1.5.0" }
+

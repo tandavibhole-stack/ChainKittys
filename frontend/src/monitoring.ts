@@ -1,4 +1,4 @@
-﻿import * as Sentry from '@sentry/react';
+import * as Sentry from '@sentry/react';
 import posthog from 'posthog-js';
 
 // Initialize Sentry error monitoring

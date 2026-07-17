@@ -1,4 +1,4 @@
-﻿import {
+import {
   rpc,
   TransactionBuilder,
   Networks,
@@ -9,21 +9,21 @@
   xdr,
   TimeoutInfinite,
 } from '@stellar/stellar-sdk';
-import {
-  isConnected,
-  getAddress,
-  signTransaction,
-} from '@stellar/freighter-api';
+import * as freighterApi from '@stellar/freighter-api';
+
+const { isConnected, signTransaction } = freighterApi;
+const getAddress = (freighterApi as any).getAddress;
+const getPublicKey = (freighterApi as any).getPublicKey;
 
 // RPC server for Stellar Testnet
 export const RPC_SERVER_URL = 'https://soroban-testnet.stellar.org:443';
 export const rpcServer = new rpc.Server(RPC_SERVER_URL);
 
 // Native XLM token contract on Testnet
-export const NATIVE_TOKEN_ID = 'CAS3J52FBZ64567472NJ2BIH5CD57FGBV53E2ND6VNG7DV7JUBU6F2F5';
+export let NATIVE_TOKEN_ID = 'CDLZFC3SYJYDZT7K67VZ75HPJVIEUVNIXF47ZG2FB2RMQQVU2HHGCYSC';
 
 // Deployed contract address fallback (will be overwritten by deploy.sh)
-let CONTRACT_ID = 'CACR2G6WZKYYD6Q6G3T6UEXN3T5H77V5YWYXYLNX23G5JZQ6F6KITTY';
+let CONTRACT_ID = 'CAHACLVVN6U7JMBEBD2TOGYJLPDC34QGOR7L2IBSXZTE6T4RBU3KZ5TS';
 
 try {
   // Try to load contract ID dynamically from deployed config
@@ -55,13 +55,38 @@ export async function connectWallet(): Promise<WalletInfo> {
   }
 
   try {
-    const result = await getAddress();
-    if (!result || result.error) {
-      throw new Error(result?.error || 'Wallet is locked or user denied access.');
+    let address = '';
+    
+    // 1. Try to get address using getAddress (Freighter v6+)
+    if (typeof getAddress === 'function') {
+      try {
+        const result = await getAddress();
+        if (result && result.address) {
+          address = result.address;
+        } else if (result && result.error) {
+          console.warn('getAddress returned error:', result.error);
+        }
+      } catch (e) {
+        console.warn('getAddress call failed:', e);
+      }
     }
+
+    // 2. Try to get public key as fallback (Freighter v5 and below)
+    if (!address && typeof getPublicKey === 'function') {
+      try {
+        address = await getPublicKey();
+      } catch (e) {
+        console.warn('getPublicKey call failed:', e);
+      }
+    }
+
+    if (!address) {
+      throw new Error('Could not retrieve public key. Please unlock your Freighter extension and select/create a Testnet account.');
+    }
+
     return {
       connected: true,
-      address: result.address,
+      address: address,
       network: 'testnet',
     };
   } catch (err: any) {
@@ -72,10 +97,10 @@ export async function connectWallet(): Promise<WalletInfo> {
 /**
  * Helper to simulate a read-only contract call.
  */
-async function queryContract(functionName: string, args: xdr.ScVal[] = []): Promise<any> {
+async function queryContractAddress(contractId: string, functionName: string, args: xdr.ScVal[] = []): Promise<any> {
   try {
     // We use a dummy source account to simulate
-    const dummySource = 'GAAZIYQHP89NSAWVZJFR32TCPJOOOBK4ZTDMGHF9U7PVAQRO6ZDJSKTY';
+    const dummySource = 'GB4YEUNCDRAP3W2FXJNCZEJW5V2LE5LJ5FVMOZNMXE3YFVL76HA3FX7E';
     const sourceAccount = await rpcServer.getAccount(dummySource);
 
     const transaction = new TransactionBuilder(sourceAccount, {
@@ -84,7 +109,7 @@ async function queryContract(functionName: string, args: xdr.ScVal[] = []): Prom
     })
       .addOperation(
         Operation.invokeContractFunction({
-          contract: CONTRACT_ID,
+          contract: contractId,
           function: functionName,
           args,
         })
@@ -106,8 +131,23 @@ async function queryContract(functionName: string, args: xdr.ScVal[] = []): Prom
       throw new Error(`Failed to simulate: ${errorMsg}`);
     }
   } catch (err: any) {
-    console.error(`Error in contract query (${functionName}):`, err);
+    console.error(`Error in contract query (${functionName}) on ${contractId}:`, err);
     throw err;
+  }
+}
+
+async function queryContract(functionName: string, args: xdr.ScVal[] = []): Promise<any> {
+  return queryContractAddress(CONTRACT_ID, functionName, args);
+}
+
+export async function getEscrowBalance(): Promise<number> {
+  try {
+    const args = [nativeToScVal(Address.fromString(CONTRACT_ID))];
+    const balanceRaw = await queryContractAddress(NATIVE_TOKEN_ID, 'balance', args);
+    return Number(balanceRaw) / 10000000;
+  } catch (err) {
+    console.error('Failed to get escrow balance:', err);
+    return 0;
   }
 }
 
@@ -118,10 +158,27 @@ async function callContract(
   sourceAddress: string,
   functionName: string,
   args: xdr.ScVal[] = []
-): Promise<string> {
+): Promise<{ hash: string; returnValue?: xdr.ScVal }> {
   try {
-    // 1. Fetch current transaction sequence number
-    const sourceAccount = await rpcServer.getAccount(sourceAddress);
+    // 1. Fetch current transaction sequence number (fund automatically if new)
+    let sourceAccount;
+    try {
+      sourceAccount = await rpcServer.getAccount(sourceAddress);
+    } catch (e) {
+      console.log('Account not found on Testnet. Funding via Friendbot...');
+      try {
+        const res = await fetch(`https://friendbot.stellar.org/?addr=${sourceAddress}`);
+        if (!res.ok) throw new Error('Friendbot request failed');
+        // Wait 4 seconds for ledger close
+        await new Promise((r) => setTimeout(r, 4000));
+        sourceAccount = await rpcServer.getAccount(sourceAddress);
+      } catch (err) {
+        throw new Error(
+          'Your account is not funded on Testnet. Please fund it first at https://friendbot.stellar.org/?addr=' +
+            sourceAddress
+        );
+      }
+    }
 
     // 2. Build preliminary transaction
     const tx = new TransactionBuilder(sourceAccount, {
@@ -141,15 +198,28 @@ async function callContract(
     // 3. Simulate transaction to calculate exact gas fees and footprint
     const simResult = await rpcServer.simulateTransaction(tx);
     if (!rpc.Api.isSimulationSuccess(simResult)) {
-      const errorSim = simResult as any;
-      throw new Error(`Transaction simulation failed: ${errorSim.result?.error || 'Unknown error'}`);
+      console.warn("Raw simulation failure:", simResult);
+      let errorMsg = 'Unknown error';
+      if ((simResult as any).error) {
+        errorMsg = (simResult as any).error;
+      } else if ((simResult as any).result?.error) {
+        errorMsg = (simResult as any).result.error;
+      } else if ((simResult as any).results && (simResult as any).results[0]?.error) {
+        errorMsg = (simResult as any).results[0].error;
+      } else if ((simResult as any).results && (simResult as any).results[0]?.retval) {
+        try {
+          const scVal = (simResult as any).results[0].retval;
+          errorMsg = `Contract error code: ${scValToNative(scVal)}`;
+        } catch (_) {}
+      }
+      throw new Error(`Transaction simulation failed: ${errorMsg}`);
     }
 
     // 4. Assemble transaction with simulation footprints and fees
-    const preparedTx = rpc.assembleTransaction(tx, simResult);
+    const preparedTx = rpc.assembleTransaction(tx, simResult).build();
 
     // 5. Sign transaction via Freighter
-    const xdrString = (preparedTx as any).toXDR();
+    const xdrString = preparedTx.toXDR();
     const result = await signTransaction(xdrString, {
       networkPassphrase: Networks.TESTNET,
     });
@@ -168,12 +238,13 @@ async function callContract(
     // 8. Poll for transaction status
     let status: string = submitResult.status;
     let pollCount = 0;
-    while ((status === 'PENDING' || status === 'ERROR') && pollCount < 15) {
+    let txStatus;
+    while ((status === 'PENDING' || status === 'ERROR' || status === 'NOT_FOUND') && pollCount < 30) {
       await new Promise((r) => setTimeout(r, 2000));
-      const txStatus = await rpcServer.getTransaction(submitResult.hash);
+      txStatus = await rpcServer.getTransaction(submitResult.hash);
       status = txStatus.status;
       if (status === 'SUCCESS') {
-        return submitResult.hash;
+        break;
       }
       if (status === 'FAILED') {
         throw new Error('Transaction execution failed on-chain.');
@@ -181,8 +252,11 @@ async function callContract(
       pollCount++;
     }
 
-    if (status === 'SUCCESS') {
-      return submitResult.hash;
+    if (status === 'SUCCESS' && txStatus) {
+      return {
+        hash: submitResult.hash,
+        returnValue: (txStatus as any).returnValue,
+      };
     }
     throw new Error(`Transaction status timeout: ${status}`);
   } catch (err: any) {
@@ -198,19 +272,21 @@ export async function createGroup(
   members: string[],
   contributionAmount: number,
   cycleDurationSeconds: number
-): Promise<string> {
+): Promise<{ hash: string; groupId: number }> {
   const organizerAddr = Address.fromString(organizer);
   const memberAddrList = members.map((m) => Address.fromString(m));
 
   const args = [
     nativeToScVal(organizerAddr),
     nativeToScVal(memberAddrList),
-    nativeToScVal(BigInt(contributionAmount), { type: 'i128' }),
+    nativeToScVal(BigInt(contributionAmount) * 10000000n, { type: 'i128' }),
     nativeToScVal(BigInt(cycleDurationSeconds), { type: 'u64' }),
     nativeToScVal(members.length, { type: 'u32' }),
   ];
 
-  return callContract(organizer, 'create_group', args);
+  const res = await callContract(organizer, 'create_group', args);
+  const groupId = res.returnValue ? Number(scValToNative(res.returnValue)) : 0;
+  return { hash: res.hash, groupId };
 }
 
 export async function contributeToGroup(groupId: number, memberAddress: string): Promise<string> {
@@ -220,7 +296,8 @@ export async function contributeToGroup(groupId: number, memberAddress: string):
     nativeToScVal(memberAddr),
   ];
 
-  return callContract(memberAddress, 'contribute', args);
+  const res = await callContract(memberAddress, 'contribute', args);
+  return res.hash;
 }
 
 export async function triggerGroupPayout(groupId: number, organizerAddress: string): Promise<string> {
@@ -228,7 +305,8 @@ export async function triggerGroupPayout(groupId: number, organizerAddress: stri
     nativeToScVal(BigInt(groupId), { type: 'u64' }),
   ];
 
-  return callContract(organizerAddress, 'trigger_payout', args);
+  const res = await callContract(organizerAddress, 'trigger_payout', args);
+  return res.hash;
 }
 
 export async function flagDefault(groupId: number, memberAddress: string, organizerAddress: string): Promise<string> {
@@ -238,7 +316,8 @@ export async function flagDefault(groupId: number, memberAddress: string, organi
     nativeToScVal(memberAddr),
   ];
 
-  return callContract(organizerAddress, 'handle_default', args);
+  const res = await callContract(organizerAddress, 'handle_default', args);
+  return res.hash;
 }
 
 // === CONTRACT READ METHODS ===
@@ -282,8 +361,8 @@ export async function getMemberHistory(groupId: number, memberAddress: string): 
   ];
   const raw = await queryContract('get_member_history', args);
   return {
-    contributions_made: Number(raw.contributions_made),
-    payouts_received: Number(raw.payouts_received),
+    contributions_made: Number(raw.contributions) / 10000000,
+    payouts_received: Number(raw.payouts_received) / 10000000,
     defaults: raw.defaults,
   };
 }

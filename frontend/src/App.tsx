@@ -1,4 +1,4 @@
-﻿import { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import {
   Wallet,
   PlusCircle,
@@ -22,6 +22,7 @@ import {
   getGroupStatus,
   getCycleInfo,
   getMemberHistory,
+  getEscrowBalance,
   CONTRACT_ID,
   NATIVE_TOKEN_ID,
 } from './stellar';
@@ -60,12 +61,29 @@ function App() {
   const [cycleInfo, setCycleInfo] = useState<CycleStatusResponse | null>(null);
   const [memberStats, setMemberStats] = useState<MemberStat[]>([]);
   const [loadingGroup, setLoadingGroup] = useState(false);
+  const [escrowBalance, setEscrowBalance] = useState<number>(0);
 
   // Create Group Form
-  const [formMembers, setFormMembers] = useState<string>('');
+  const [formMembers, setFormMembers] = useState<string[]>(['']);
   const [formAmount, setFormAmount] = useState<string>('100');
   const [formDuration, setFormDuration] = useState<string>('120'); // Default: 2 minutes for testing
   const [creatingGroup, setCreatingGroup] = useState(false);
+
+  const handleAddMemberField = () => {
+    setFormMembers((prev) => [...prev, '']);
+  };
+
+  const handleRemoveMemberField = (index: number) => {
+    setFormMembers((prev) => prev.filter((_, i) => i !== index));
+  };
+
+  const handleMemberChange = (index: number, value: string) => {
+    setFormMembers((prev) => {
+      const next = [...prev];
+      next[index] = value;
+      return next;
+    });
+  };
 
   // Transaction Pending States
   const [txPending, setTxPending] = useState<string | null>(null);
@@ -115,8 +133,10 @@ function App() {
     try {
       const status = await getGroupStatus(id);
       const cycle = await getCycleInfo(id);
+      const balance = await getEscrowBalance();
       setGroupStatus(status);
       setCycleInfo(cycle);
+      setEscrowBalance(balance);
 
       // Reconstruct member statistics
       const allMembers = [...cycle.paid_members, ...cycle.unpaid_members];
@@ -135,6 +155,7 @@ function App() {
       setGroupStatus(null);
       setCycleInfo(null);
       setMemberStats([]);
+      setEscrowBalance(0);
     } finally {
       setLoadingGroup(false);
     }
@@ -181,7 +202,6 @@ function App() {
     setTxPending('Creating Savings Group...');
     try {
       const membersList = formMembers
-        .split(',')
         .map((addr) => addr.trim())
         .filter((addr) => addr.length > 0);
 
@@ -201,12 +221,12 @@ function App() {
         throw new Error('Contribution amount must be greater than zero.');
       }
 
-      const txHash = await createGroup(wallet.address, membersList, amount, duration);
-      showToast(`Group created successfully! Tx: ${txHash.substring(0, 8)}...`, 'success');
+      const result = await createGroup(wallet.address, membersList, amount, duration);
+      showToast(`Savings Circle #${result.groupId} created successfully! (Tx: ${result.hash.substring(0, 8)}...)`, 'success');
       trackEvent('group_created', { organizer: wallet.address, memberCount: membersList.length });
       
-      setFormMembers('');
-      setActiveGroupId((prev) => prev + 1);
+      setFormMembers(['']);
+      setActiveGroupId(result.groupId);
     } catch (err: any) {
       captureError(err, 'create_group');
       showToast(err.message || 'Failed to create group.', 'error');
@@ -371,17 +391,39 @@ function App() {
             <form onSubmit={handleCreateGroup} className="flex flex-col gap-5">
               <div>
                 <label className="block text-xs font-semibold text-gray-400 uppercase tracking-wider mb-2">
-                  Member Addresses (Comma separated)
+                  Member Addresses
                 </label>
-                <textarea
-                  value={formMembers}
-                  onChange={(e) => setFormMembers(e.target.value)}
-                  placeholder="GAAZ..., GBCD..., GDEF..."
-                  rows={4}
-                  className="w-full bg-[#161a24] border border-gray-800 rounded-xl px-4 py-3 text-sm text-gray-200 placeholder-gray-500 focus:outline-none focus:border-pink-500 transition-colors resize-none font-mono"
-                  required
-                />
-                <p className="text-[10px] text-gray-500 mt-1">
+                <div className="flex flex-col gap-2.5 max-h-[180px] overflow-y-auto pr-1">
+                  {formMembers.map((member, index) => (
+                    <div key={index} className="flex items-center gap-2">
+                      <input
+                        type="text"
+                        value={member}
+                        onChange={(e) => handleMemberChange(index, e.target.value)}
+                        placeholder={`Member #${index + 1} Address (G...)`}
+                        className="flex-grow bg-[#161a24] border border-gray-800 rounded-xl px-4 py-2.5 text-xs text-gray-200 placeholder-gray-500 focus:outline-none focus:border-pink-500 transition-colors font-mono"
+                        required
+                      />
+                      {formMembers.length > 1 && (
+                        <button
+                          type="button"
+                          onClick={() => handleRemoveMemberField(index)}
+                          className="text-xs bg-rose-950/40 hover:bg-rose-900/50 text-rose-400 border border-rose-900/40 px-3 py-2.5 rounded-xl cursor-pointer transition-colors"
+                        >
+                          Remove
+                        </button>
+                      )}
+                    </div>
+                  ))}
+                </div>
+                <button
+                  type="button"
+                  onClick={handleAddMemberField}
+                  className="mt-2.5 text-[11px] bg-purple-950/40 hover:bg-purple-900/50 text-purple-300 border border-purple-900/40 px-3 py-1.5 rounded-lg cursor-pointer transition-colors font-semibold"
+                >
+                  + Add Member Field
+                </button>
+                <p className="text-[10px] text-gray-500 mt-2">
                   Organizer is auto-included. Addresses must be valid Stellar public keys.
                 </p>
               </div>
@@ -519,7 +561,7 @@ function App() {
                   <div>
                     <span className="block text-[10px] text-gray-500 uppercase font-semibold mb-1">Escrow Balance</span>
                     <span className="text-xl font-extrabold text-pink-400">
-                      {cycleInfo ? cycleInfo.paid_members.length * 100 : 0} <span className="text-xs text-gray-400">XLM</span>
+                      {escrowBalance} <span className="text-xs text-gray-400">XLM</span>
                     </span>
                   </div>
                   <div className="bg-pink-950/40 p-2.5 rounded-xl border border-pink-900/30">

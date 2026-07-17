@@ -1,0 +1,23 @@
+# Cargo build targets
+/target
+/target_release
+/target_test
+
+# Node.js dependencies & builds
+node_modules/
+dist/
+dist-ssr/
+*.local
+
+# IDE configurations
+.idea/
+.vscode/
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
+
+# OS files
+.DS_Store
+Thumbs.db

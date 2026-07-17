@@ -351,6 +351,7 @@ export interface MemberRecordResponse {
   contributions_made: number;
   payouts_received: number;
   defaults: number;
+  reputation_score: number;
 }
 
 export async function getMemberHistory(groupId: number, memberAddress: string): Promise<MemberRecordResponse> {
@@ -361,8 +362,24 @@ export async function getMemberHistory(groupId: number, memberAddress: string): 
   ];
   const raw = await queryContract('get_member_history', args);
   return {
-    contributions_made: Number(raw.contributions) / 10000000,
+    contributions_made: Number(raw.contributions_made) / 10000000,
     payouts_received: Number(raw.payouts_received) / 10000000,
     defaults: raw.defaults,
+    reputation_score: raw.reputation_score,
   };
+}
+
+export async function joinGroup(groupId: number, memberAddress: string): Promise<string> {
+  const memberAddr = Address.fromString(memberAddress);
+  const args = [
+    nativeToScVal(BigInt(groupId), { type: 'u64' }),
+    nativeToScVal(memberAddr),
+  ];
+  const res = await callContract(memberAddress, 'join_group', args);
+  return res.hash;
+}
+
+export async function getOpenGroups(): Promise<number[]> {
+  const raw = await queryContract('get_open_groups');
+  return (raw || []).map((id: any) => Number(id));
 }

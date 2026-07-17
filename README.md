@@ -294,7 +294,7 @@ The repository must include screenshots corresponding to the following categorie
 4. **Cargo Test Screenshot:**
 ![alt text](./image-3.png)
 
-5. **CI/CD Screenshot:** 
-![alt text](image-4.png)
+5. **CI/CD Screenshot:**
+![alt text](./image-4.png)
 
 6. **Demo Video Link:** [Google Photos](https://photos.app.goo.gl/nHMgddoZNMYoKwud6)

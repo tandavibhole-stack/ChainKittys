@@ -575,6 +575,14 @@
                           "lo": 0
                         }
                       }
+                    },
+                    {
+                      "key": {
+                        "symbol": "reputation_score"
+                      },
+                      "val": {
+                        "u32": 100
+                      }
                     }
                   ]
                 }
@@ -657,6 +665,14 @@
                           "lo": 0
                         }
                       }
+                    },
+                    {
+                      "key": {
+                        "symbol": "reputation_score"
+                      },
+                      "val": {
+                        "u32": 100
+                      }
                     }
                   ]
                 }
@@ -738,6 +754,14 @@
                           "hi": 0,
                           "lo": 0
                         }
+                      }
+                    },
+                    {
+                      "key": {
+                        "symbol": "reputation_score"
+                      },
+                      "val": {
+                        "u32": 100
                       }
                     }
                   ]

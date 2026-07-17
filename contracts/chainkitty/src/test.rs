@@ -1,4 +1,4 @@
-﻿#![cfg(test)]
+#![cfg(test)]
 
 use super::*;
 use soroban_sdk::{
@@ -265,4 +265,94 @@ fn test_double_contribution() {
 
     // Second contribution in same cycle should fail
     client.contribute(&group_id, &m1);
+}
+
+#[test]
+fn test_join_group_and_discovery() {
+    let env = Env::default();
+    let (_admin, _token_address, client) = setup_env(&env);
+
+    let organizer = Address::generate(&env);
+    let m1 = Address::generate(&env);
+    let m2 = Address::generate(&env);
+
+    // Create a group that requires 3 members, but start with 2
+    let mut members = Vec::new(&env);
+    members.push_back(organizer.clone());
+    members.push_back(m1.clone());
+
+    // member_count is 3, members.len() is 2
+    let group_id = client.create_group(&organizer, &members, &1000, &3600, &3);
+    assert_eq!(group_id, 1);
+
+    // Group should be in Forming status
+    let status = client.get_group_status(&group_id);
+    assert!(matches!(status, GroupStatus::Forming));
+
+    // It should be listed in open groups
+    let open_groups = client.get_open_groups();
+    assert_eq!(open_groups.len(), 1);
+    assert_eq!(open_groups.get(0).unwrap(), group_id);
+
+    // A third member joins
+    client.join_group(&group_id, &m2);
+
+    // Group status should become Active
+    let status_after = client.get_group_status(&group_id);
+    assert!(matches!(status_after, GroupStatus::Active));
+
+    // It should no longer be listed in open groups
+    let open_groups_after = client.get_open_groups();
+    assert_eq!(open_groups_after.len(), 0);
+
+    // Member record should show reputation 100
+    let m2_history = client.get_member_history(&group_id, &m2);
+    assert_eq!(m2_history.reputation_score, 100);
+}
+
+#[test]
+fn test_default_reputation_impact() {
+    let env = Env::default();
+    let (_admin, token_address, client) = setup_env(&env);
+
+    let organizer = Address::generate(&env);
+    let m1 = Address::generate(&env);
+    let m2 = Address::generate(&env);
+    let m3 = Address::generate(&env);
+
+    let mut members = Vec::new(&env);
+    members.push_back(m1.clone());
+    members.push_back(m2.clone());
+    members.push_back(m3.clone());
+
+    let group_id = client.create_group(&organizer, &members, &1000, &3600, &3);
+
+    // Fund members
+    let token_admin = token::StellarAssetClient::new(&env, &token_address);
+    token_admin.mint(&m1, &10000);
+    token_admin.mint(&m2, &10000);
+    token_admin.mint(&m3, &10000);
+
+    // M1 contributes, others default
+    client.contribute(&group_id, &m2); // m2 contributes
+
+    // Fast forward ledger time by 4000 seconds
+    let current_time = env.ledger().timestamp();
+    env.ledger().set(LedgerInfo {
+        timestamp: current_time + 4000,
+        protocol_version: 20,
+        sequence_number: 100,
+        network_id: [0; 32],
+        base_reserve: 0,
+        min_temp_entry_ttl: 0,
+        min_persistent_entry_ttl: 0,
+        max_entry_ttl: 0,
+    });
+
+    // M1 defaulted
+    client.handle_default(&group_id, &m1);
+
+    let m1_history = client.get_member_history(&group_id, &m1);
+    assert_eq!(m1_history.defaults, 1);
+    assert_eq!(m1_history.reputation_score, 75); // Dropped by 25
 }

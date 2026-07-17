@@ -1,4 +1,4 @@
-﻿#![no_std]
+#![no_std]
 use soroban_sdk::{
     contract, contractimpl, contracttype, contracterror, symbol_short, Address, Env, Vec, Symbol,
     token::Client as TokenClient,
@@ -54,6 +54,7 @@ pub struct MemberRecord {
     pub contributions_made: i128,
     pub payouts_received: i128,
     pub defaults: u32,
+    pub reputation_score: u32,
 }
 
 #[contracttype]
@@ -81,6 +82,8 @@ pub enum ContractError {
     GroupCompleted = 8,
     Unauthorized = 9,
     InvalidMemberCount = 10,
+    GroupNotForming = 11,
+    AlreadyAMember = 12,
 }
 
 // Events
@@ -117,7 +120,7 @@ impl ChainKittyContract {
     ) -> Result<u64, ContractError> {
         organizer.require_auth();
 
-        if members.len() != member_count {
+        if members.len() > member_count || member_count == 0 {
             return Err(ContractError::InvalidMemberCount);
         }
 
@@ -133,6 +136,13 @@ impl ChainKittyContract {
 
         let group_id = count;
 
+        let is_active = members.len() == member_count;
+        let status = if is_active {
+            GroupStatus::Active
+        } else {
+            GroupStatus::Forming
+        };
+
         let group_state = GroupState {
             id: group_id,
             organizer: organizer.clone(),
@@ -140,35 +150,38 @@ impl ChainKittyContract {
             contribution_amount,
             cycle_duration,
             member_count,
-            status: GroupStatus::Active,
+            status,
             token,
         };
 
         // Save group state
         env.storage().persistent().set(&DataKey::Group(group_id), &group_state);
 
-        // Initialize cycle state
-        let start_time = env.ledger().timestamp();
-        let deadline = start_time + cycle_duration;
-        let next_recipient = members.get(0).unwrap();
+        if is_active {
+            // Initialize cycle state
+            let start_time = env.ledger().timestamp();
+            let deadline = start_time + cycle_duration;
+            let next_recipient = members.get(0).unwrap();
 
-        let cycle_state = CycleState {
-            current_cycle: 1,
-            paid_count: 0,
-            next_recipient,
-            deadline,
-        };
-        env.storage().persistent().set(&DataKey::Cycle(group_id), &cycle_state);
-
-        // Initialize member history records
-        for i in 0..members.len() {
-            let m = members.get(i).unwrap();
-            let record = MemberRecord {
-                contributions_made: 0,
-                payouts_received: 0,
-                defaults: 0,
+            let cycle_state = CycleState {
+                current_cycle: 1,
+                paid_count: 0,
+                next_recipient,
+                deadline,
             };
-            env.storage().persistent().set(&DataKey::MemberHistory(group_id, m), &record);
+            env.storage().persistent().set(&DataKey::Cycle(group_id), &cycle_state);
+
+            // Initialize member history records
+            for i in 0..members.len() {
+                let m = members.get(i).unwrap();
+                let record = MemberRecord {
+                    contributions_made: 0,
+                    payouts_received: 0,
+                    defaults: 0,
+                    reputation_score: 100,
+                };
+                env.storage().persistent().set(&DataKey::MemberHistory(group_id, m), &record);
+            }
         }
 
         // Emit GroupCreated event
@@ -303,6 +316,13 @@ impl ChainKittyContract {
             (recipient.clone(), payout_amount, cycle.current_cycle),
         );
 
+        // Storage optimization: remove HasPaid records for the completed cycle
+        for i in 0..group.members.len() {
+            let m = group.members.get(i).unwrap();
+            let has_paid_key = DataKey::HasPaid(group_id, cycle.current_cycle, m.clone());
+            env.storage().persistent().remove(&has_paid_key);
+        }
+
         // Advance to next cycle or complete group
         if (cycle.current_cycle as u32) >= total_members {
             // Group is complete
@@ -376,6 +396,11 @@ impl ChainKittyContract {
         let history_key = DataKey::MemberHistory(group_id, member.clone());
         let mut record: MemberRecord = env.storage().persistent().get(&history_key).unwrap();
         record.defaults += 1;
+        record.reputation_score = if record.reputation_score >= 25 {
+            record.reputation_score - 25
+        } else {
+            0
+        };
         env.storage().persistent().set(&history_key, &record);
 
         // Emit MemberDefaulted event
@@ -445,6 +470,91 @@ impl ChainKittyContract {
         }
         let record: MemberRecord = env.storage().persistent().get(&history_key).unwrap();
         Ok(record)
+    }
+
+    /// Join an open (forming) savings group.
+    pub fn join_group(env: Env, group_id: u64, member: Address) -> Result<(), ContractError> {
+        member.require_auth();
+
+        let group_key = DataKey::Group(group_id);
+        if !env.storage().persistent().has(&group_key) {
+            return Err(ContractError::GroupNotFound);
+        }
+        let mut group: GroupState = env.storage().persistent().get(&group_key).unwrap();
+
+        if group.status != GroupStatus::Forming {
+            return Err(ContractError::GroupNotForming);
+        }
+
+        // Check if member already in group
+        let mut is_member = false;
+        for i in 0..group.members.len() {
+            if group.members.get(i).unwrap() == member {
+                is_member = true;
+                break;
+            }
+        }
+        if is_member {
+            return Err(ContractError::AlreadyAMember);
+        }
+
+        group.members.push_back(member.clone());
+
+        let is_active = group.members.len() == group.member_count;
+        if is_active {
+            group.status = GroupStatus::Active;
+
+            // Initialize cycle state
+            let start_time = env.ledger().timestamp();
+            let deadline = start_time + group.cycle_duration;
+            let next_recipient = group.members.get(0).unwrap();
+
+            let cycle_state = CycleState {
+                current_cycle: 1,
+                paid_count: 0,
+                next_recipient,
+                deadline,
+            };
+            env.storage().persistent().set(&DataKey::Cycle(group_id), &cycle_state);
+
+            // Initialize member history records
+            for i in 0..group.members.len() {
+                let m = group.members.get(i).unwrap();
+                let record = MemberRecord {
+                    contributions_made: 0,
+                    payouts_received: 0,
+                    defaults: 0,
+                    reputation_score: 100,
+                };
+                env.storage().persistent().set(&DataKey::MemberHistory(group_id, m), &record);
+            }
+        }
+
+        env.storage().persistent().set(&group_key, &group);
+
+        // Emit MemberJoined event
+        let member_joined: Symbol = symbol_short!("join");
+        env.events().publish(
+            (member_joined, group_id),
+            (member, group.members.len()),
+        );
+
+        Ok(())
+    }
+
+    /// Get all open (forming) groups.
+    pub fn get_open_groups(env: Env) -> Vec<u64> {
+        let count: u64 = env.storage().instance().get(&DataKey::GroupCount).unwrap_or(0);
+        let mut open_groups = Vec::new(&env);
+        for id in 1..=count {
+            let group_key = DataKey::Group(id);
+            if let Some(group) = env.storage().persistent().get::<_, GroupState>(&group_key) {
+                if let GroupStatus::Forming = group.status {
+                    open_groups.push_back(id);
+                }
+            }
+        }
+        open_groups
     }
 }
 

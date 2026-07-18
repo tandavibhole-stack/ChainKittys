@@ -250,8 +250,8 @@ This table maps real feedback from our onboarded users to the modifications made
 ---
 
 ## 13. User Feedback Data
-* **Google Feedback Form URL**: [`<ADD_GOOGLE_FORM_LINK>`](<ADD_GOOGLE_FORM_LINK>)
-* **Exported Public Spreadsheet URL**: [`<ADD_EXCEL_SHEET_LINK>`](<ADD_EXCEL_SHEET_LINK>)
+* **Google Feedback Form URL**: [Google Form Feedback](https://docs.google.com/forms/d/100sPKgYOAh_fdp81IErl-2w9jpyDlScoWzheVMwcKI8/edit)
+* **Exported Public Spreadsheet URL**: [Google Sheets Responses](https://docs.google.com/spreadsheets/d/1IYvYMqTjj-762eizWvATbhRIEXccBb4wOUk6OMOxXic/edit?usp=sharing)
   * *Note*: This response spreadsheet is set to public "View-Only" access.
 
 ---

@@ -4,7 +4,7 @@ $ErrorActionPreference = "Stop"
 $NETWORK = "testnet"
 $RPC_URL = "https://soroban-testnet.stellar.org:443"
 $PASSPHRASE = "Test SDF Network ; September 2015"
-$NATIVE_TOKEN = "CAS3J52FBZ64567472NJ2BIH5CD57FGBV53E2ND6VNG7DV7JUBU6F2F5"
+$NATIVE_TOKEN = "CDLZFC3SYJYDZT7K67VZ75HPJVIEUVNIXF47ZG2FB2RMQQVU2HHGCYSC"
 
 Write-Host "=== ChainKitty PowerShell Deployer ===" -ForegroundColor Cyan
 
@@ -22,15 +22,15 @@ $IDENTITY = "chainkitty_deployer"
 Write-Host "Checking identity '$IDENTITY'..." -ForegroundColor Yellow
 $DEPLOYER_ADDR = ""
 try {
-    $DEPLOYER_ADDR = & soroban config identity address $IDENTITY 2>$null
+    $DEPLOYER_ADDR = & soroban keys address $IDENTITY 2>$null
 } catch {
     # If it fails, generate a new identity
 }
 
 if (-not $DEPLOYER_ADDR) {
     Write-Host "Identity not found. Generating new keypair..." -ForegroundColor Yellow
-    & soroban config identity generate $IDENTITY
-    $DEPLOYER_ADDR = & soroban config identity address $IDENTITY
+    & soroban keys generate $IDENTITY
+    $DEPLOYER_ADDR = & soroban keys address $IDENTITY
 }
 Write-Host "Deployer Address: $DEPLOYER_ADDR" -ForegroundColor Green
 

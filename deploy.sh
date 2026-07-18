@@ -1,11 +1,11 @@
-﻿#!/bin/bash
+#!/bin/bash
 set -e
 
 # Load helper variables
 NETWORK="testnet"
 RPC_URL="https://soroban-testnet.stellar.org:443"
 FRIENDBOT_URL="https://friendbot.stellar.org"
-NATIVE_TOKEN="CAS3J52FBZ64567472NJ2BIH5CD57FGBV53E2ND6VNG7DV7JUBU6F2F5"
+NATIVE_TOKEN="CDLZFC3SYJYDZT7K67VZ75HPJVIEUVNIXF47ZG2FB2RMQQVU2HHGCYSC"
 
 echo "=== ChainKitty Deployer ==="
 
@@ -22,12 +22,12 @@ fi
 # 2. Check/Generate Deployer Identity
 IDENTITY="chainkitty_deployer"
 echo "Checking identity '$IDENTITY'..."
-if ! soroban config identity show "$IDENTITY" >/dev/null 2>&1; then
+if ! soroban keys address "$IDENTITY" >/dev/null 2>&1; then
     echo "Identity not found. Generating new keypair..."
-    soroban config identity generate "$IDENTITY"
+    soroban keys generate "$IDENTITY"
 fi
 
-DEPLOYER_ADDR=$(soroban config identity address "$IDENTITY")
+DEPLOYER_ADDR=$(soroban keys address "$IDENTITY")
 echo "Deployer Address: $DEPLOYER_ADDR"
 
 # 3. Fund Identity

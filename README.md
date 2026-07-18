@@ -168,7 +168,7 @@ Open \`http://localhost:5173\` in your browser.
 
 * **Stellar Testnet Contract ID**: [\`CCT3VRGNSGTEDVBLPH4S42ZCY2LFI35MYM3HN2I4XPZTTJC7DSZINLIY\`](https://stellar.expert/explorer/testnet/contract/CCT3VRGNSGTEDVBLPH4S42ZCY2LFI35MYM3HN2I4XPZTTJC7DSZINLIY)
 * **Native XLM SAC Address**: \`CDLZFC3SYJYDZT7K67VZ75HPJVIEUVNIXF47ZG2FB2RMQQVU2HHGCYSC\`
-* **Live Demo URL**: [https://chainkitty.vercel.app](https://chainkitty.vercel.app)
+* **Live Demo URL**: [https://chain-kittys-six.vercel.app/](https://chain-kittys-six.vercel.app/)
 * **Transaction Hashes**:
   * Upload WASM & Deploy: [c9e16f9f762fd2143d3be2199ba7a8496e0b9b24f3be4798649d7ddc5e6c7788](https://stellar.expert/explorer/testnet/tx/c9e16f9f762fd2143d3be2199ba7a8496e0b9b24f3be4798649d7ddc5e6c7788)
   * Initialize Contract: [c7fef3d8c7107773581c8dd42ee2f9db4cefca01bacf653873241c103cf5a477](https://stellar.expert/explorer/testnet/tx/c7fef3d8c7107773581c8dd42ee2f9db4cefca01bacf653873241c103cf5a477)
@@ -305,7 +305,7 @@ We have integrated **PostHog** for product analytics (tracking wallet connection
 ---
 
 ## 17. Demo Video
-📹 [Watch Demo Video](<ADD_DEMO_VIDEO_LINK>)
+📹 [Watch Demo Video](https://photos.app.goo.gl/m7iZDT1Lr2VwAQ4a9)
 
 * **Video Walkthrough Contents**:
   * Wallet Connection and guided Onboarding Wizard.
